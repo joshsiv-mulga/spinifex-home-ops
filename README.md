@@ -274,9 +274,8 @@ just bootstrap apps
 The nodes report `NotReady` until `bootstrap apps` installs Cilium; that's
 expected. Flux then brings everything up in dependency order, two reconciles at
 a time. That is slower than all at once, deliberately: a burst of parallel
-image pulls stalls etcd's disk writes on Spinifex block storage. Allow 20–30
-minutes on a fresh cluster; `flux get ks -A | grep -v True` shows what's still
-waiting, and on what.
+image pulls stalls etcd's disk writes on Spinifex block storage.
+`flux get ks -A | grep -v True` shows what's still waiting, and on what.
 
 ### 6. Reach it
 
