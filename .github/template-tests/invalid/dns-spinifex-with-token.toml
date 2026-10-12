@@ -1,0 +1,20 @@
+# Negative fixture: a DNS token alongside dns.provider "spinifex".
+# northstar and ACM take the same SigV4 credentials as the rest of the API,
+# so a token here is a Cloudflare setting left behind.
+provider = "spinifex"
+
+[network]
+node_cidr = "172.31.0.0/20"
+
+[domain]
+name = "example.com"
+
+[dns]
+provider = "spinifex"
+token    = "fake"
+
+[repository]
+url = "https://github.com/onedr0p/cluster-template.git"
+
+[talos]
+schematic_id = "376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba"

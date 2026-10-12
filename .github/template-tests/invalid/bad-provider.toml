@@ -1,0 +1,28 @@
+provider = "proxmox"
+
+[network]
+node_cidr = "172.31.0.0/20"
+
+[kubernetes.api]
+addr = "172.31.0.254"
+
+[gateways]
+internal = "172.31.0.252"
+dns      = "172.31.0.253"
+
+[domain]
+name = "example.com"
+
+[dns]
+provider = "none"
+
+[repository]
+url = "https://github.com/onedr0p/cluster-template.git"
+
+[[nodes]]
+name         = "k8s-0"
+address      = "172.31.0.4"
+controller   = true
+disk         = "/dev/vda"
+mac_addr     = "02:88:a5:66:74:b6"
+schematic_id = "376567988ad370138ad8b2698212367b8edcb69b5fd68c80be1f2ec7d603b4ba"
