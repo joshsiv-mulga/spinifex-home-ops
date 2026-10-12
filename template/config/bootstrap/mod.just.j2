@@ -1,0 +1,197 @@
+set no-exit-message
+set quiet
+set shell := ['bash', '-euo', 'pipefail', '-c']
+set script-interpreter := ['bash', '-euo', 'pipefail']
+set default-list
+set default-script
+
+kubernetes_dir := justfile_dir() + '/kubernetes'
+
+#% if provider == 'bare-metal' %#
+[doc('Bootstrap the Talos cluster')]
+[group('bootstrap')]
+talos: talos-secret talos-apply talos-talosconfig talos-kubeconfig
+#% else %#
+talos_dir := justfile_dir() + '/talos'
+
+# Split in two because the provider launches the nodes in between: the
+# machine configs are the user-data it hands them, so they have to exist
+# first, and etcd can only be bootstrapped once a node answers.
+
+[doc('Render the machine configs the provider hands to new nodes')]
+[group('bootstrap')]
+talos: talos-secret talos-render
+    just log info "Machine configs rendered — launch the nodes with the matching file as user-data, then run: just bootstrap cluster <controller-address>"
+
+# Takes an address rather than defaulting to the endpoint: the load balancer
+# only has a backend once a node is up, so the first contact has to be with
+# the node itself.
+[doc('Bootstrap etcd on a launched controller and fetch the kubeconfig')]
+[group('bootstrap')]
+cluster node: (talos-bootstrap node) (talos-kubeconfig node)
+#% endif %#
+
+[doc('Bootstrap apps into the Talos cluster')]
+[group('bootstrap')]
+apps: apps-ready apps-namespaces apps-secrets apps-crds apps-helm
+    just log info "Cluster is bootstrapped — Flux will start syncing the Git repository"
+
+#% if provider == 'bare-metal' %#
+# No sops call or existence guard is needed: the bundle is stored already
+# encrypted with the repo's age recipient, and existing bundles are left
+# untouched.
+[private]
+[working-directory('../talos')]
+talos-secret:
+    just log info "Generating secrets" stage "{{ recipe_name() }}"
+    topf secrets --confirm=false > /dev/null
+
+[private]
+[working-directory('../talos')]
+talos-apply:
+    just log info "Applying talos config and bootstrapping" stage "{{ recipe_name() }}"
+    topf apply --auto-bootstrap --confirm=false
+
+[private]
+[working-directory('../talos')]
+talos-talosconfig:
+    just log info "Generating talosconfig" stage "{{ recipe_name() }}"
+    topf talosconfig > talosconfig
+
+# topf issues short-lived admin certs by default; 8760h keeps the
+# kubeconfig usable long-term.
+[private]
+[working-directory('../talos')]
+talos-kubeconfig:
+    just log info "Fetching kubeconfig" stage "{{ recipe_name() }}"
+    topf kubeconfig --validity 8760h > "{{ justfile_dir() }}/kubeconfig"
+#% else %#
+[private]
+talos-secret:
+    just log info "Generating secrets" stage "{{ recipe_name() }}"
+    just talos secrets
+
+[private]
+talos-render:
+    just log info "Rendering machine configs" stage "{{ recipe_name() }}"
+    just talos render
+
+# gen config leaves the endpoint list empty because it cannot know the
+# address the provider will assign; filling it in is what turns the rendered
+# talosconfig into a usable client config.
+[private]
+talos-bootstrap node:
+    just log info "Waiting for the Talos API" stage "{{ recipe_name() }}" node "{{ node }}"
+    export TALOSCONFIG="{{ talos_dir }}/rendered/talosconfig"
+    talosctl config endpoint "{{ node }}"
+    talosctl config node "{{ node }}"
+    # A 10s cap per attempt in plain bash: coreutils' `timeout` isn't on macOS,
+    # and with its "command not found" sent to /dev/null below, every attempt
+    # would read as the API not answering.
+    # The attempt's output is kept and its last line logged on each retry, so
+    # a refusal (wrong certificate, wrong address) reads differently from a
+    # node that is still booting.
+    out="$(mktemp)"
+    trap 'rm -f "$out"' EXIT
+    talos_answers() {
+        talosctl version >"$out" 2>&1 & local pid=$!
+        ( sleep 10; kill "$pid" 2>/dev/null ) & local watchdog=$!
+        local rc=0
+        wait "$pid" || rc=$?
+        kill "$watchdog" 2>/dev/null || true
+        return "$rc"
+    }
+    deadline=$((SECONDS + 600))
+    until talos_answers; do
+        last="$(grep -v '^[[:space:]]*$' "$out" | tail -n 1)"
+        if (( SECONDS >= deadline )); then
+            just log fatal "Timed out waiting for the Talos API" node "{{ node }}" error "${last:-timed out}"
+        fi
+        just log info "Talos API not answering yet, retrying in 10 seconds..." error "${last:-timed out after 10s}"
+        sleep 10
+    done
+    install -m 600 "$TALOSCONFIG" "{{ talos_dir }}/talosconfig"
+    just log info "Bootstrapping etcd" stage "{{ recipe_name() }}" node "{{ node }}"
+    if ! out="$(talosctl bootstrap 2>&1)"; then
+        case "$out" in
+            *AlreadyExists*) just log info "etcd is already bootstrapped" ;;
+            *) just log fatal "Failed to bootstrap etcd" error "$out" ;;
+        esac
+    fi
+
+# The apiserver only starts serving once etcd has a leader, so the first
+# several attempts are expected to fail.
+[private]
+talos-kubeconfig node:
+    just log info "Fetching kubeconfig" stage "{{ recipe_name() }}" node "{{ node }}"
+    export TALOSCONFIG="{{ talos_dir }}/talosconfig"
+    deadline=$((SECONDS + 600))
+    until err="$(talosctl kubeconfig --nodes "{{ node }}" --merge=false --force "{{ justfile_dir() }}/kubeconfig" 2>&1)"; do
+        last="$(grep -v '^[[:space:]]*$' <<<"$err" | tail -n 1)"
+        if (( SECONDS >= deadline )); then
+            just log fatal "Timed out fetching the kubeconfig" node "{{ node }}" error "$last"
+        fi
+        just log info "Kubernetes API not ready yet, retrying in 10 seconds..." error "$last"
+        sleep 10
+    done
+#% endif %#
+
+[private]
+apps-crds:
+    just log info "Applying CRDs" stage "{{ recipe_name() }}"
+    if ! helmfile --file "{{ source_directory() }}/helmfile/crds.yaml" template --quiet | yq eval-all --exit-status 'select(.kind == "CustomResourceDefinition")' | kubectl apply --server-side --force-conflicts --filename -; then
+        just log fatal "Failed to apply crds"
+    fi
+
+[private]
+apps-helm:
+    just log info "Syncing helmfile" stage "{{ recipe_name() }}"
+    if ! helmfile --file "{{ source_directory() }}/helmfile/apps.yaml" sync --hide-notes; then
+        just log fatal "Failed to sync helmfile"
+    fi
+
+[private]
+apps-namespaces:
+    just log info "Applying namespaces for apps" stage "{{ recipe_name() }}"
+    for app in "{{ kubernetes_dir }}/apps"/*/; do
+        ns="$(basename "$app")"
+        if kubectl create namespace "$ns" --dry-run=client -o yaml \
+                | kubectl apply --server-side --filename - &>/dev/null; then
+            just log info "Namespace applied" namespace "$ns"
+        else
+            just log fatal "Failed to apply namespace" namespace "$ns"
+        fi
+    done
+
+[private]
+apps-secrets:
+    just log info "Applying secrets for apps" stage "{{ recipe_name() }}"
+    for secret in \
+        "{{ source_directory() }}/deploy-key.sops.yaml" \
+        "{{ source_directory() }}/sops-age.sops.yaml" \
+        "{{ kubernetes_dir }}/components/sops/cluster-secrets.sops.yaml"
+    do
+        name="$(basename "$secret" .sops.yaml)"
+        if sops decrypt "$secret" \
+                | kubectl --namespace flux-system apply --server-side --filename - &>/dev/null; then
+            just log info "Secret applied" resource "$name"
+        else
+            just log fatal "Failed to apply secret" resource "$name"
+        fi
+    done
+
+# Wait until nodes register as Ready=False. They only become Ready=True once the CNI is healthy.
+[private]
+apps-ready:
+    just log info "Waiting for nodes to register as Ready=False" stage "{{ recipe_name() }}"
+    if ! kubectl wait nodes --for=condition=Ready=True --all --timeout=10s &>/dev/null; then
+        deadline=$((SECONDS + 600))
+        until err="$(kubectl wait nodes --for=condition=Ready=False --all --timeout=10s 2>&1)"; do
+            last="$(grep -v '^[[:space:]]*$' <<<"$err" | tail -n 1)"
+            if (( SECONDS >= deadline )); then
+                just log fatal "Timed out waiting for nodes to register" error "$last"
+            fi
+            just log info "Nodes not available, waiting for nodes to be available. Retrying in 5 seconds..." error "$last"
+            sleep 5
+        done
+    fi

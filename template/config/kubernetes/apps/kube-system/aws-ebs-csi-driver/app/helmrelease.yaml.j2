@@ -1,0 +1,45 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: aws-ebs-csi-driver
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: aws-ebs-csi-driver
+  interval: 1h
+  values:
+    controller:
+      #| One controller per node up to two. The chart defaults to two, which
+         on a single node leaves a replica it can never place. #|
+      replicaCount: #{ 2 if nodes | length > 1 else 1 }#
+      region: "#{ spinifex.region }#"
+      env:
+        - name: AWS_CA_BUNDLE
+          value: /etc/spinifex/ca.pem
+      volumes:
+        - name: spinifex-ca
+          configMap:
+            name: spinifex-ca
+      volumeMounts:
+        - name: spinifex-ca
+          mountPath: /etc/spinifex
+          readOnly: true
+    #| gp3 is the only volume type CreateVolume takes; anything else is
+       rejected outright. #|
+    storageClasses:
+      - name: ebs-gp3
+        annotations:
+          storageclass.kubernetes.io/is-default-class: "true"
+        allowVolumeExpansion: true
+        parameters:
+          type: gp3
+          csi.storage.k8s.io/fstype: ext4
+    # Upstream inherited this from rook-ceph's chart; on EBS nothing supplies
+    # it, and without it every VolumeSnapshot waits forever for a content that
+    # is never created, which strands any volsync-backed claim.
+    volumeSnapshotClasses:
+      - name: ebs-gp3
+        annotations:
+          snapshot.storage.kubernetes.io/is-default-class: "true"
+        deletionPolicy: Delete

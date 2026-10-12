@@ -1,0 +1,9 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spinifex-ca
+  namespace: storage
+data:
+  ca.pem: |
+    # placeholder: ./scripts/preflight.sh writes your Spinifex CA here

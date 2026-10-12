@@ -1,0 +1,25 @@
+#| Rendered from cluster.toml. Edit cluster.toml and re-run `just configure`
+   rather than editing this file, which is overwritten every render. #|
+region           = "#{ spinifex.region }#"
+gateway_endpoint = "#{ spinifex.gateway_url }#"
+s3_endpoint      = "#{ spinifex.s3_url }#"
+admin_cidr       = "#{ spinifex.admin_cidr }#"
+aws_profile      = "#{ spinifex.aws_profile }#"
+
+cluster_name = "#{ spinifex.cluster_name }#"
+domain       = "#{ domain.name }#"
+node_cidr    = "#{ network.node_cidr }#"
+
+instance_type      = "#{ spinifex.instance_type }#"
+node_disk_size     = #{ spinifex.node_disk_size }#
+controllers        = #{ spinifex.controllers }#
+workers            = #{ spinifex.workers }#
+external_node_port = #{ spinifex.external_node_port }#
+
+#| The same addresses the machine configs resolve the API's name to. #|
+controller_addresses = [#% for addr in controller_addrs %##{ '"' ~ addr ~ '"' }##% if not loop.last %#, #% endif %##% endfor %#]
+nfs_address           = "#{ nfs_addr }#"
+
+tags = {
+  "cluster" = "#{ spinifex.cluster_name }#"
+}

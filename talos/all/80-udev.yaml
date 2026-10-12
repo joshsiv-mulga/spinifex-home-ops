@@ -1,0 +1,4 @@
+machine:
+  udev:
+    rules:
+      - 'ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="vd*", ATTR{serial}=="vol*", SYMLINK+="disk/by-id/nvme-Amazon_Elastic_Block_Store_$attr{serial}"'

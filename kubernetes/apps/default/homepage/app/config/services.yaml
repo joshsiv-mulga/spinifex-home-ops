@@ -1,0 +1,48 @@
+---
+# Grouped by the Spinifex service each application exercises, rather than by
+# what the application does. The lab this came from grouped by function; here
+# the grouping is the point being made.
+
+- Block storage — EBS:
+    - Vikunja:
+        href: https://vikunja.${SECRET_DOMAIN}
+        icon: vikunja.png
+        description: Tasks on an ebs-gp3 claim, snapshotted and backed up
+
+- File storage — NFS on EC2 and EBS:
+    - Jellyfin:
+        href: https://jellyfin.${SECRET_DOMAIN}
+        icon: jellyfin.png
+        description: Media library on an NFS export, served off an EBS volume
+
+- Database — RDS:
+    - Atuin:
+        href: https://atuin.${SECRET_DOMAIN}
+        icon: mdi-console
+        description: Shell history, all of it in a managed Postgres
+
+- Object storage — Predastore:
+    - Kopia:
+        href: https://kopia.${SECRET_DOMAIN}
+        icon: kopia.png
+        description: Backup repository, S3 on Predastore
+
+- Observability:
+    - Grafana:
+        href: https://grafana.${SECRET_DOMAIN}
+        icon: grafana.png
+        description: Dashboards
+    - Prometheus:
+        href: https://prometheus.${SECRET_DOMAIN}
+        icon: prometheus.png
+        description: Metrics, on a volumeClaimTemplate
+    - Alertmanager:
+        href: https://alertmanager.${SECRET_DOMAIN}
+        icon: alertmanager.png
+        description: Alerts
+
+- Platform:
+    - Echo:
+        href: https://echo.${SECRET_DOMAIN}
+        icon: mdi-check-network
+        description: Shared HTTPS listener, ACM certificate from the tenant CA

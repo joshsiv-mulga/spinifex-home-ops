@@ -1,0 +1,11 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  #% if cert_manager_enabled %#
+  - ./certificate.yaml
+  #% endif %#
+  - ./envoy.yaml
+  - ./helmrelease.yaml
+  - ./ocirepository.yaml
+  - ./podmonitor.yaml

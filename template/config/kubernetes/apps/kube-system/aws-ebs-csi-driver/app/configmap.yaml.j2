@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aws-meta
+data:
+  #| The chart reads this key as an optional configMapKeyRef for
+     AWS_EC2_ENDPOINT, so the endpoint arrives with no values override. It is
+     spelled out in full because the SDK builds endpoints from its compiled-in
+     partition table rather than from the services domain IMDS hands out, and
+     it never guesses a port. #|
+  endpoint: "#{ spinifex.ec2_endpoint }#"

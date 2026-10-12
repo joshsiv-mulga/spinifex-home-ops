@@ -1,0 +1,33 @@
+---
+# yaml-language-server: $schema=https://kubernetes-schemas.pages.dev/volsync.backube/replicationsource_v1alpha1.json
+apiVersion: volsync.backube/v1alpha1
+kind: ReplicationSource
+metadata:
+  name: ${APP}
+spec:
+  sourcePVC: ${VOLSYNC_CLAIM:=${APP}}
+  trigger:
+    schedule: "0 6 * * *"
+  kopia:
+    accessModes:
+      - ${VOLSYNC_SNAP_ACCESSMODES:=ReadWriteOnce}
+    cacheAccessModes:
+      - ${VOLSYNC_CACHE_ACCESSMODES:=ReadWriteOnce}
+    cacheCapacity: ${VOLSYNC_CACHE_CAPACITY:=2Gi}
+    cacheStorageClassName: ${VOLSYNC_CACHE_SNAPSHOTCLASS:=ebs-gp3}
+    compression: zstd-fastest
+    copyMethod: Snapshot
+    customCA:
+      configMapName: spinifex-ca
+      key: ca.pem
+    moverSecurityContext:
+      runAsUser: ${VOLSYNC_UID:=568}
+      runAsGroup: ${VOLSYNC_GID:=568}
+      fsGroup: ${VOLSYNC_GID:=568}
+    parallelism: 2
+    repository: ${APP}-volsync-secret
+    retain:
+      hourly: 24
+      daily: 7
+    storageClassName: ${VOLSYNC_STORAGECLASS:=ebs-gp3}
+    volumeSnapshotClassName: ${VOLSYNC_SNAPSHOTCLASS:=ebs-gp3}

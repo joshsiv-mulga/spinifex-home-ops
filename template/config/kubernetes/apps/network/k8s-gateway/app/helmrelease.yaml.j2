@@ -1,0 +1,29 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: k8s-gateway
+spec:
+  chartRef:
+    kind: OCIRepository
+    name: k8s-gateway
+  interval: 1h
+  values:
+    fullnameOverride: k8s-gateway
+    domain: "${SECRET_DOMAIN}"
+    ttl: 1
+    service:
+      #% if provider == 'bare-metal' %#
+      type: LoadBalancer
+      port: 53
+      annotations:
+        lbipam.cilium.io/ips: "#{ gateways.dns }#"
+      #% else %#
+      #| Reached through a load balancer created before the cluster, so the
+         node port is pinned rather than allocated. #|
+      type: NodePort
+      port: 53
+      nodePort: #{ spinifex.dns_node_port }#
+      #% endif %#
+      externalTrafficPolicy: Cluster
+    watchedResources: ["HTTPRoute", "Service"]

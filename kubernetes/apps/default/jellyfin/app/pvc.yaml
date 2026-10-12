@@ -1,0 +1,13 @@
+---
+# The metadata cache, which is large, regenerable, and deliberately outside the
+# claim volsync backs up.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-cache
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: ebs-gp3

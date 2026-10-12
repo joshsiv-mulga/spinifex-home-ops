@@ -1,0 +1,46 @@
+# Secrets
+*.pub
+*.key
+*.decrypted~*.yaml
+/age.key
+/cloudflare-tunnel.json
+/deploy.key
+/deploy.key.pub
+/flux-webhook-token.txt
+/spinifex-ca.pem
+# Template config files
+/cluster.toml
+# Rendered from age.key by `just configure`; carries the age recipient of
+# whoever's fork this is, so it is never a fork's own fixed state.
+/.sops.yaml
+# Kubernetes
+kubeconfig
+talosconfig
+# Tofu. The state holds every node's user-data, which is the machine config,
+# which carries the cluster's CA keys and tokens. A saved plan holds the same
+# thing, so it is ignored for the same reason rather than for being noise.
+/tofu/.terraform/
+/tofu/*.tfstate
+/tofu/*.tfstate.*
+/tofu/tfplan
+# Rendered from cluster.toml by `just configure`; never hand-edited.
+/tofu/terraform.tfvars
+# Per-cluster Talos patches rendered from cluster.toml — carry the domain and
+# the node addresses, so they are regenerated rather than committed.
+/talos/all/10-cluster.yaml
+/talos/all/81-hosts.yaml
+/talos/control-plane/00-cluster.yaml
+# A per-cluster secret with no tofu output to derive it from; `just init`
+# generates it once and it persists across `just configure` re-renders.
+/vikunja-jwt-secret.txt
+# Python
+__pycache__/
+*.py[cod]
+# Misc.
+.claude/
+.private/
+.venv/
+.DS_Store
+Thumbs.db
+/talos/output/
+/talos/rendered/

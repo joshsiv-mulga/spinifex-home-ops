@@ -1,0 +1,24 @@
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: aws-ebs-csi-driver
+spec:
+  dependsOn:
+    - name: snapshot-controller
+      namespace: storage
+  interval: 1h
+  path: ./kubernetes/apps/kube-system/aws-ebs-csi-driver/app
+  postBuild:
+    substituteFrom:
+      - name: cluster-secrets
+        kind: Secret
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+    namespace: flux-system
+  targetNamespace: kube-system
+  # Many Kustomizations depend on this one for PVC binding, so Ready must
+  # mean the CSI driver pods are actually up, not just applied.
+  wait: true

@@ -1,0 +1,28 @@
+---
+- Spinifex:
+    - Docs:
+        - icon: mdi-book-open-variant
+          href: "https://mulgadc.com/spinifex"
+    - Mulga:
+        - icon: mdi-home-analytics
+          href: "https://mulgadc.com"
+- Upstream:
+    - cluster-template:
+        - icon: github.png
+          href: "https://github.com/onedr0p/cluster-template"
+    - kubesearch:
+        - icon: kubernetes-dashboard.png
+          href: "https://kubesearch.dev/"
+    - artifact-hub:
+        - icon: mdi-ferry
+          href: "https://artifacthub.io/"
+- Toolchain:
+    - Talos:
+        - icon: mdi-linux
+          href: "https://www.talos.dev/"
+    - Flux:
+        - icon: mdi-sync
+          href: "https://fluxcd.io/"
+    - OpenTofu:
+        - icon: mdi-terraform
+          href: "https://opentofu.org/"

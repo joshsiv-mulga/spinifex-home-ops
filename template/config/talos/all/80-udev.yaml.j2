@@ -1,0 +1,8 @@
+#| A volume arrives as virtio-blk with the volume ID in its serial, which is
+   what AWS carries in an NVMe serial; only the bus-derived nvme- prefix is
+   missing. aws-ebs-csi-driver resolves a volume through that path, so without
+   the link a volume attaches and then fails to mount. #|
+machine:
+  udev:
+    rules:
+      - 'ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="vd*", ATTR{serial}=="vol*", SYMLINK+="disk/by-id/nvme-Amazon_Elastic_Block_Store_$attr{serial}"'

@@ -1,0 +1,12 @@
+#| The API is reached by name, and nothing publishes that name before the
+   cluster it points at exists. Every node resolves it from here instead, to
+   the control-plane addresses the launch pins — which is also why those
+   addresses are pinned. #|
+machine:
+  network:
+    extraHostEntries:
+      #% for addr in controller_addrs %#
+      - ip: #{ addr }#
+        aliases:
+          - #{ kubernetes.api.host }#
+      #% endfor %#

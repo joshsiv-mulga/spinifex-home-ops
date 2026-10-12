@@ -1,0 +1,200 @@
+#:schema ./cluster.schema.json
+# =============================================================================
+#    This fork targets Spinifex only. Follow the README's "0. A Spinifex
+#    cluster" checklist before filling this in — you need a bare-metal
+#    Spinifex cluster already installed (docs.mulgadc.com), pool-mode external
+#    networking with a LAN range reserved in your router, a tenant CA for your
+#    domain, and the AWS profile + platform CA copied to this workstation.
+# =============================================================================
+provider = "spinifex"
+
+
+# =============================================================================
+#    Cluster-internal control plane and overlay networks. These never appear
+#    on your LAN — they're entirely inside the cluster. The defaults are fine
+#    for almost everyone; touch this section only if it collides with
+#    something else on your network.
+# =============================================================================
+[network]
+
+# The range the controller addresses (and the pod/etcd advertised subnet) are
+# carved from. On the spinifex provider this is also the VPC OpenTofu creates
+# for the cluster — its own, not a shared one — so it never appears on your
+# LAN, but it must not overlap any other VPC it needs to route to or the LAN
+# itself: pick any private block not already used elsewhere in your Spinifex
+# deployment.
+# REQUIRED. Example: "172.31.0.0/20"
+node_cidr = "172.31.0.0/20"
+
+# Pod and service CIDRs. Must NOT overlap each other or node_cidr.
+# OPTIONAL. Default: "10.42.0.0/16" / "10.43.0.0/16"
+
+# pod_cidr = "10.42.0.0/16"
+# svc_cidr = "10.43.0.0/16"
+
+
+# =============================================================================
+#    The Git repo Flux will sync from. This is the single source of truth
+#    for everything in your cluster — once bootstrapped, changes are made by
+#    pushing to this repo. Any Git host works: GitHub, GitLab, Gitea,
+#    Forgejo, Codeberg or self-hosted.
+# =============================================================================
+[repository]
+
+# Full clone URL of the repository this cluster will pull from.
+# Must be the repo you cloned this template into.
+# Use `https://` if the repo is publicly readable (or `http://` for a
+# LAN-local git server). Use `ssh://git@` if it is
+# private: the template then wires up a deploy key (`deploy.key.pub`) so
+# Flux can clone over SSH; see the README for the extra setup step.
+# REQUIRED. Examples:
+#   "https://github.com/you/spinifex-home-ops.git"
+#   "ssh://git@gitlab.com/you/spinifex-home-ops.git"
+url = ""
+
+# Branch Flux watches. Changes pushed to this branch get reconciled into the
+# cluster.
+# OPTIONAL. Default: "main"
+
+# branch = "main"
+
+# Webhook payload format the Flux webhook Receiver verifies, so pushes are
+# reconciled instantly. Use "none" to skip it (Flux then only polls).
+# OPTIONAL. Default: "github".
+# Allowed: "github" | "gitlab" | "generic-hmac" | "none"
+
+# webhook_provider = "github"
+
+# SSH host keys for your Git host. Only used with `ssh://` URLs. Keys for
+# github.com, gitlab.com and codeberg.org are bundled; REQUIRED for any
+# other host (`ssh-keyscan -t ed25519,ecdsa,rsa <host>` output).
+# OPTIONAL.
+
+# known_hosts = ""
+
+
+# =============================================================================
+#    The domain your cluster's hostnames live under: echo, flux-webhook, the
+#    per-app hostnames, and the ACM wildcard certificate the edge load
+#    balancer holds. This does not need to be a registered public domain —
+#    it only has to resolve on the machines that need to reach the cluster,
+#    via /etc/hosts (see the README's "Reach it" step).
+# =============================================================================
+[domain]
+
+# REQUIRED. Example: "example.lan"
+name = ""
+
+
+# =============================================================================
+#    DNS and certificates. "spinifex" is the only setting this fork supports:
+#    records would be northstar's and the wildcard certificate comes from
+#    ACM on the edge load balancer, so cert-manager is not installed at all.
+# =============================================================================
+[dns]
+
+provider = "spinifex"
+
+
+# =============================================================================
+#    CNI configuration. The defaults are already correct for Spinifex (pod
+#    traffic is tunnelled, so `loadbalancer_mode` is forced to "snat"); touch
+#    this section only if you need BGP peering, which Spinifex does not use.
+# =============================================================================
+# [cilium]
+# loadbalancer_mode = "snat"
+
+
+# =============================================================================
+#    Talos Image Factory settings shared by all nodes.
+# =============================================================================
+[talos]
+
+# The 64-character hex string from your build at https://factory.talos.dev/.
+# Build one for the "aws" platform (not "metal") with whatever extensions you
+# need; the base schematic with no extensions works for a plain cluster.
+# REQUIRED.
+schematic_id = ""
+
+
+# =============================================================================
+#    Everything specific to running on a Spinifex cluster: where the gateway
+#    and Predastore answer, how many nodes to launch, and the credentials
+#    profile copied from the node. See the README's "0. A Spinifex cluster"
+#    checklist for where each of these values comes from.
+# =============================================================================
+[spinifex]
+
+# Where this workstation reaches the gateway's API, e.g. a node's address or
+# the pool's VIP. Not necessarily the same host a guest reaches the cluster
+# through — this is only used by tofu, from outside the tenant network.
+# REQUIRED. Example: "https://10.0.0.5:9999"
+gateway_url = ""
+
+# Predastore's S3 endpoint. Answers on its own port, separately from the
+# gateway.
+# REQUIRED. Example: "https://10.0.0.5:8443"
+s3_url = ""
+
+# CIDR allowed to reach the load balancer and the Talos and Kubernetes APIs.
+# Your own host or LAN, never 0.0.0.0/0 — the platform has no public
+# exposure of its own, so this is the cluster's only network boundary.
+# REQUIRED. Example: "10.0.0.0/24"
+admin_cidr = ""
+
+# AWS shared-credentials profile holding the access keys `spx admin init`
+# wrote on the node. Copy it from the node to ~/.aws/{config,credentials} on
+# this workstation before running `tofu apply` — see the README. The bare
+# "spinifex" profile (the default) is a single-node dev profile pointing at
+# localhost; use the name cluster bootstrap actually gave you if it differs.
+# OPTIONAL. Default: "spinifex"
+
+# aws_profile = "spinifex"
+
+# AWS region string the gateway reports. Cosmetic here — Spinifex is not
+# actually multi-region — but it has to match what the gateway expects or
+# every signed request fails with 403 SignatureDoesNotMatch.
+# OPTIONAL. Default: "ap-southeast-2"
+
+# region = "ap-southeast-2"
+
+# Prefix for every resource tofu creates, and for generated node names
+# (k8s-0, k8s-1, ...).
+# OPTIONAL. Default: "k8s"
+
+# cluster_name = "k8s"
+
+# Instance type for every node.
+# OPTIONAL. Default: "t3.medium"
+
+# instance_type = "t3.medium"
+
+# Root disk per node, in GiB. Sized for container images, not data: a claim
+# lands on its own EBS volume, but the AMI is unpacked onto this disk, and
+# the AMI's own size leaves nowhere near enough.
+# OPTIONAL. Default: 40
+
+# node_disk_size = 40
+
+# How many control-plane nodes to launch. Must be odd, for etcd quorum, and
+# no more than the Spinifex cluster's physical hosts: controllers are spread
+# one per host, so a host failure costs one etcd member rather than quorum.
+# Apps run on the controllers too, so on a small platform `controllers` equal
+# to the host count with no workers is the usual shape. Worker nodes are
+# optional and launched as a separate pool.
+# OPTIONAL. Default: 1 (controllers), 0 (workers)
+
+# controllers = 1
+# workers = 0
+
+# Optional: lets `scripts/preflight.sh` SSH to a node and stage + import the
+# Talos image itself (`spx admin images import`), rather than printing the
+# command for you to run by hand. The node downloads the image from the Talos
+# factory itself, so it needs internet access. ssh_user must be able to sudo:
+# the script asks for the password over SSH if sudo wants one. ssh_key
+# defaults to your SSH agent / the usual identity files when left unset.
+# OPTIONAL. Example: ssh_host = "10.0.0.5", ssh_user = "admin"
+
+# ssh_host = ""
+# ssh_user = ""
+# ssh_key  = ""

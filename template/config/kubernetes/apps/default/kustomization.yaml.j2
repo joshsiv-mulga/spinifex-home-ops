@@ -1,0 +1,16 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: default
+
+components:
+  - ../../components/sops
+  - ../../components/repos/app-template
+
+resources:
+  - ./namespace.yaml
+  - ./atuin/ks.yaml
+  - ./echo/ks.yaml
+  - ./homepage/ks.yaml
+  - ./jellyfin/ks.yaml
+  - ./vikunja/ks.yaml

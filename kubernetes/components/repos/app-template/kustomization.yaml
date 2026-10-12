@@ -1,0 +1,8 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/kustomization
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+# One chart source per namespace, owned by the namespace rather than by
+# whichever application happened to be ported first.
+resources:
+  - ./ocirepository.yaml

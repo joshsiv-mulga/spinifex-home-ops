@@ -1,0 +1,129 @@
+#cloud-config
+# Brings up the media export on first boot. Everything here is idempotent, so a
+# reboot or a re-run leaves the volume and its contents alone.
+
+package_update: true
+packages:
+  - nfs-kernel-server
+  # The way media gets onto the library from a desktop, as it did onto the
+  # NAS this replaces. Applications still mount it over NFS.
+  - samba
+  # Generates the sample library below, so the demo does not depend on any
+  # media being copied in by hand or fetched from the internet.
+  - ffmpeg
+
+write_files:
+  - path: /usr/local/sbin/setup-media-export.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      mountpoint=/srv/media
+
+      # The data volume is whichever whole disk is not the one holding root.
+      # Named by size and order rather than by device path because the guest
+      # sees virtio names that do not match the /dev/sdf the attachment asked
+      # for, and the mapping is not stable across reboots.
+      #
+      # The attachment completes after the instance is already running, so the
+      # disk is waited for rather than assumed.
+      root_dev=$(lsblk -no pkname "$(findmnt -no SOURCE /)")
+      data_dev=""
+      for _ in $(seq 1 60); do
+          for name in $(lsblk -dn -o NAME,TYPE | awk '$2 == "disk" { print $1 }'); do
+              [[ "$name" == "$root_dev" ]] && continue
+              data_dev="/dev/$name"
+              break
+          done
+          [[ -n "$data_dev" ]] && break
+          echo "waiting for the data volume to attach ..."
+          sleep 5
+      done
+
+      if [[ -z "$data_dev" ]]; then
+          echo "no data volume attached after five minutes" >&2
+          exit 1
+      fi
+
+      if ! blkid "$data_dev" >/dev/null 2>&1; then
+          mkfs.ext4 -L media "$data_dev"
+      fi
+
+      mkdir -p "$mountpoint"
+      uuid=$(blkid -s UUID -o value "$data_dev")
+      if ! grep -q "$uuid" /etc/fstab; then
+          echo "UUID=$uuid $mountpoint ext4 defaults,nofail 0 2" >>/etc/fstab
+      fi
+      systemctl daemon-reload
+      mountpoint -q "$mountpoint" || mount "$mountpoint"
+
+      # The applications run unprivileged, so the export is owned by the user
+      # they run as rather than squashed to nobody at the server.
+      mkdir -p "$mountpoint"/{movies,tv,music}
+
+      # A library with nothing in it proves nothing, so one generated title is
+      # written the first time and left alone afterwards.
+      sample="$mountpoint/movies/Test Pattern (2026)/Test Pattern (2026).mp4"
+      if [[ ! -f "$sample" ]]; then
+          mkdir -p "$(dirname "$sample")"
+          ffmpeg -nostdin -y \
+              -f lavfi -i "testsrc=duration=30:size=1280x720:rate=25" \
+              -f lavfi -i "sine=frequency=440:duration=30" \
+              -pix_fmt yuv420p -c:v libx264 -preset veryfast -c:a aac \
+              -shortest "$sample"
+      fi
+
+      chown -R ${media_uid}:${media_uid} "$mountpoint"
+
+      echo "$mountpoint ${export_cidr}(rw,sync,no_subtree_check)" >/etc/exports
+      exportfs -ra
+      systemctl enable --now nfs-server
+
+      # SMB for loading media from a desktop. Everything written through it
+      # lands as the user the applications run as, whoever logs in, so the NFS
+      # side never sees a file it can't read. Written here rather than through
+      # write_files so the samba package's own default config can't win.
+      getent group media >/dev/null || groupadd --gid ${media_uid} media
+      id media >/dev/null 2>&1 \
+          || useradd --uid ${media_uid} --gid media --no-create-home --shell /usr/sbin/nologin media
+      cat >/etc/samba/smb.conf <<'SMB'
+      [global]
+         server role = standalone server
+         map to guest = never
+         # Finder's metadata, stored as streams rather than ._ files.
+         vfs objects = fruit streams_xattr
+         fruit:metadata = stream
+         fruit:posix_rename = yes
+         fruit:delete_empty_adfiles = yes
+
+      [media]
+         path = /srv/media
+         valid users = media
+         read only = no
+         force user = media
+         create mask = 0664
+         directory mask = 0775
+      SMB
+      printf '%s\n%s\n' '${smb_password}' '${smb_password}' | smbpasswd -s -a media
+      systemctl enable smbd
+      systemctl restart smbd
+
+  - path: /etc/systemd/system/media-export.service
+    content: |
+      [Unit]
+      Description=Prepare and export the media library
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/sbin/setup-media-export.sh
+
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now media-export.service
